@@ -390,10 +390,6 @@
             `palabras reconocidas de longitud ≤ 10 (menos de cinco).</p>`;
       return h;
     }
-
-    /* Devuelve el texto/HTML del Módulo 3 para una palabra ('' = ε): recorrido,
-      estado final y resultado. Caso especial: símbolo fuera de Σ (indicar cuál
-      y en qué posición). */
     function modulo3(a, palabra){
       if (!a) return '<p class="no">Primero construya un autómata en el Módulo 1.</p>';
       const r = recorrerPalabra(a, palabra);
