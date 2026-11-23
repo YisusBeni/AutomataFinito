@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Simulador de Autómatas Finitos</title>
+    <style>
+      :root{--fondo:#F2F5F9;--tinta:#1B2A41;--azul:#2F5DA8;--suave:#E6EDF8;--linea:#C5D1E3;--error:#B3261E;--ok:#1E7B4F;--blanco:#fff}
+      *{box-sizing:border-box}
+      body{margin:0;background:var(--fondo);color:var(--tinta);font:16px/1.5 "Segoe UI",system-ui,sans-serif}
+      main{max-width:880px;margin:0 auto;padding:28px 18px 60px}
+      h1{font-size:1.6rem;margin:0 0 4px} h2{font-size:1.15rem;margin:0 0 12px}
+      p.sub{margin:0 0 20px;color:#4a5b75}
+      nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+      button{font:inherit;cursor:pointer;border:1px solid var(--azul);background:var(--blanco);color:var(--azul);padding:7px 14px;border-radius:6px}
+      button:hover{background:var(--suave)}
+      button.primario,nav button.activo{background:var(--azul);color:var(--blanco)}
+      button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #8FB2EA;outline-offset:2px}
+      section{display:none;background:var(--blanco);border:1px solid var(--linea);border-radius:8px;padding:20px}
+      section.visible{display:block}
+      label{display:block;font-weight:600;margin:14px 0 4px}
+      input[type=text]{width:100%;font:inherit;padding:7px 10px;border:1px solid var(--linea);border-radius:6px}
+      select{font:inherit;padding:4px 6px;margin:0 6px 6px 0}
+      .fila{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+      .error{color:var(--error);margin-top:10px;min-height:1.2em}
+      .aviso{background:#FFF4D6;border:1px solid #E8C766;padding:10px 14px;border-radius:6px;margin-bottom:14px;display:none}
+      table{border-collapse:collapse;margin:10px 0}
+      th,td{border:1px solid var(--linea);padding:5px 14px;text-align:center}
+      th{background:var(--suave)}
+      pre{background:var(--suave);padding:12px;border-radius:6px;overflow-x:auto;margin:10px 0}
+      svg{max-width:100%;height:auto;display:block;margin:12px 0}
+      .si{color:var(--ok);font-weight:600} .no{color:var(--error);font-weight:600}
+      .recorrido{font-family:ui-monospace,Consolas,monospace;color:#4a5b75}
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Simulador de Autómatas Finitos</h1>
+      <p class="sub">Estructuras Discretas · Proyecto de programación</p>
+
+      <nav>
+        <button id="nav1" onclick="mostrarSeccion(1)">1. Construir y graficar</button>
+        <button id="nav2" onclick="mostrarSeccion(2)">2. Palabras reconocidas</button>
+        <button id="nav3" onclick="mostrarSeccion(3)">3. Probar una palabra</button>
+      </nav>
+      <div class="aviso" id="aviso">Primero debe construir un autómata en el Módulo 1.</div>
+
+      <!-- MÓDULO 1 -->
+      <section id="sec1">
+        <h2>Módulo 1: construcción del autómata</h2>
+        <label for="estados">1) Estados Q (separados por comas)</label>
+        <input type="text" id="estados" placeholder="s0, s1, s2">
+        <label for="alfabeto">2) Alfabeto Σ (símbolos separados por comas)</label>
+        <input type="text" id="alfabeto" placeholder="a, b">
+        <div class="fila"><button onclick="accionGenerarDelta()">Generar transiciones</button></div>
+        <label>3) Función de transición δ</label>
+        <div id="delta-container"><em>Primero escriba Q y Σ y pulse «Generar transiciones».</em></div>
+        <label for="inicial">4) Estado inicial q0</label>
+        <input type="text" id="inicial" placeholder="s0">
+        <label for="finales">5) Estados finales F (separados por comas)</label>
+        <input type="text" id="finales" placeholder="s2">
+        <div class="fila">
+          <button class="primario" onclick="accionConstruir()">Construir autómata</button>
+          <button onclick="cargarEjemploA2()" title="Solo para probar la gráfica y los otros módulos">Cargar ejemplo A2 (pruebas)</button>
+        </div>
+        <div class="error" id="error1" role="alert"></div>
+        <div id="resultado1"></div>
+      </section>
+
+      <!-- MÓDULO 2 -->
+      <section id="sec2">
+        <h2>Módulo 2: cinco palabras que reconoce el autómata</h2>
+        <button class="primario" onclick="accionModulo2()">Mostrar palabras</button>
+        <div id="salida2"></div>
+      </section>
+
+      <!-- MÓDULO 3 -->
+      <section id="sec3">
+        <h2>Módulo 3: ¿reconoce el autómata esta palabra?</h2>
+        <label for="palabra">Palabra (vacío = palabra vacía ε)</label>
+        <input type="text" id="palabra" onkeydown="if(event.key==='Enter')accionModulo3()">
+        <div class="fila"><button class="primario" onclick="accionModulo3()">Probar palabra</button></div>
+        <div id="salida3"></div>
+      </section>
+    </main>
+
+    <script>
+    let automata = null;
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const pendiente = nombre => { throw new Error('PENDIENTE:' + nombre); };
+
+    function mostrarSeccion(n){
+      const aviso = $('aviso');
+      aviso.style.display = (n !== 1 && !automata) ? 'block' : 'none';
+      if (n !== 1 && !automata) n = 1;   // sin autómata, solo se puede estar en el Módulo 1
+      [1,2,3].forEach(i => {
+        $('sec'+i).classList.toggle('visible', i === n);
+        $('nav'+i).classList.toggle('activo', i === n);
+      });
+    }
+
+    function mostrarFallo(destino, e){
+      const msg = e.message.startsWith('PENDIENTE:')
+        ? `Pendiente: la función ${e.message.slice(10)} todavía no está implementada.`
+        : e.message;
+      destino.innerHTML = `<span class="no">${esc(msg)}</span>`;
+    }
+
+    function quintupla(a){
+      const F = a.estados.filter(e => a.finales.has(e)).join(', ');
+      return `M = ({${a.estados.join(', ')}}, {${a.alfabeto.join(', ')}}, δ, ${a.inicial}, {${F}})`;
+    }
+
+    function tablaHTML(a){
+      let h = '<table><tr><th>δ</th>' + a.alfabeto.map(s => `<th>${esc(s)}</th>`).join('') + '</tr>';
+      for (const e of a.estados){
+        const marca = (e === a.inicial ? '→ ' : '') + (a.finales.has(e) ? '* ' : '');
+        h += `<tr><th>${marca}${esc(e)}</th>` +
+            a.alfabeto.map(s => `<td>${esc(a.delta[e + '|' + s])}</td>`).join('') + '</tr>';
+      }
+      return h + '</table>';
+    }
+
+    function graficaSVG(a){
+      const R = 24, n = a.estados.length;
+      const r = n === 1 ? 0 : Math.max(90, 38 * n);
+      const W = 2 * (r + 110), H = 2 * (r + 90), cx = W / 2, cy = H / 2;
+      const pos = {};
+      a.estados.forEach((e, i) => {
+        const ang = Math.PI + 2 * Math.PI * i / n;
+        pos[e] = { x: cx + r * Math.cos(ang), y: cy + r * Math.sin(ang) };
+      });
+      const unit = (dx, dy) => { const l = Math.hypot(dx, dy) || 1; return { x: dx / l, y: dy / l }; };
+      const f = v => v.toFixed(1);
+
+      // Agrupar símbolos por (origen, destino)
+      const grupos = {};
+      for (const u of a.estados) for (const s of a.alfabeto){
+        const v = a.delta[u + '|' + s];
+        (grupos[u + '\u0000' + v] = grupos[u + '\u0000' + v] || { u, v, sim: [] }).sim.push(s);
+      }
+
+      let out = `<svg viewBox="0 0 ${f(W)} ${f(H)}" width="${f(Math.min(W, 640))}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Gráfica del autómata">
+    <defs><marker id="flecha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1B2A41"/></marker></defs>
+    <g font-family="Segoe UI, sans-serif" font-size="15" fill="#1B2A41">`;
+
+      const etiqueta = (x, y, t) =>
+        `<text x="${f(x)}" y="${f(y)}" text-anchor="middle" dominant-baseline="central" font-style="italic" stroke="#fff" stroke-width="4" paint-order="stroke">${esc(t)}</text>`;
+
+      for (const g of Object.values(grupos)){
+        const lab = g.sim.join(', '), P = pos[g.u];
+        if (g.u === g.v){                       // bucle
+          let d = n === 1 ? { x: 0, y: -1 } : unit(P.x - cx, P.y - cy);
+          if (g.u === a.inicial && d.x < -0.5) d = { x: 0, y: -1 };   // no chocar con la flecha inicial
+          const t = Math.atan2(d.y, d.x);
+          const pt = (rad, ang) => ({ x: P.x + rad * Math.cos(ang), y: P.y + rad * Math.sin(ang) });
+          const p1 = pt(R, t - 0.5), p2 = pt(R + 3, t + 0.5), c1 = pt(2.7 * R, t - 0.4), c2 = pt(2.7 * R, t + 0.4);
+          const m = { x: (p1.x + 3 * c1.x + 3 * c2.x + p2.x) / 8, y: (p1.y + 3 * c1.y + 3 * c2.y + p2.y) / 8 };
+          out += `<path d="M${f(p1.x)} ${f(p1.y)} C${f(c1.x)} ${f(c1.y)} ${f(c2.x)} ${f(c2.y)} ${f(p2.x)} ${f(p2.y)}" fill="none" stroke="#1B2A41" stroke-width="1.6" marker-end="url(#flecha)"/>`;
+          out += etiqueta(m.x + d.x * 11, m.y + d.y * 11, lab);
+        } else {                                // flecha entre dos estados
+          const Q = pos[g.v], hayVuelta = !!grupos[g.v + '\u0000' + g.u];
+          const dx = Q.x - P.x, dy = Q.y - P.y, len = Math.hypot(dx, dy);
+          const perp = { x: -dy / len, y: dx / len }, k = hayVuelta ? 0.28 : 0;
+          const C = { x: (P.x + Q.x) / 2 + perp.x * k * len, y: (P.y + Q.y) / 2 + perp.y * k * len };
+          const du = unit(C.x - P.x, C.y - P.y), dv = unit(C.x - Q.x, C.y - Q.y);
+          const s = { x: P.x + du.x * R, y: P.y + du.y * R }, e = { x: Q.x + dv.x * (R + 3), y: Q.y + dv.y * (R + 3) };
+          out += `<path d="M${f(s.x)} ${f(s.y)} Q${f(C.x)} ${f(C.y)} ${f(e.x)} ${f(e.y)}" fill="none" stroke="#1B2A41" stroke-width="1.6" marker-end="url(#flecha)"/>`;
+          const B = { x: .25 * s.x + .5 * C.x + .25 * e.x, y: .25 * s.y + .5 * C.y + .25 * e.y };
+          out += etiqueta(B.x + perp.x * 13, B.y + perp.y * 13, lab);
+        }
+      }
+
+      // Flecha del estado inicial (llega desde la izquierda)
+      const I = pos[a.inicial];
+      out += `<line x1="${f(I.x - R - 42)}" y1="${f(I.y)}" x2="${f(I.x - R - 2)}" y2="${f(I.y)}" stroke="#1B2A41" stroke-width="1.6" marker-end="url(#flecha)"/>`;
+
+      // Estados (encima de las flechas)
+      for (const e of a.estados){
+        const p = pos[e];
+        out += `<circle cx="${f(p.x)}" cy="${f(p.y)}" r="${R}" fill="#E6EDF8" stroke="#1B2A41" stroke-width="1.6"/>`;
+        if (a.finales.has(e)) out += `<circle cx="${f(p.x)}" cy="${f(p.y)}" r="${R - 5}" fill="none" stroke="#1B2A41" stroke-width="1.6"/>`;
+        out += `<text x="${f(p.x)}" y="${f(p.y)}" text-anchor="middle" dominant-baseline="central">${esc(e)}</text>`;
+      }
+      return out + '</g></svg>';
+    }
+
+    function usarAutomata(a){
+      automata = a;
+      $('resultado1').innerHTML =
+        (a.advertencia ? `<div class="aviso" style="display:block">${esc(a.advertencia)}</div>` : '') +
+        `<h3>Autómata construido</h3><pre>${esc(quintupla(a))}</pre>` + tablaHTML(a) + graficaSVG(a);
+    }
+
+    /* Autómata A2 (terminan en "ab") solo para probar mientras se desarrolla */
+    function cargarEjemploA2(){
+      $('error1').textContent = '';
+      usarAutomata({
+        estados: ['s0','s1','s2'], alfabeto: ['a','b'], inicial: 's0', finales: new Set(['s2']),
+        delta: {'s0|a':'s1','s0|b':'s0','s1|a':'s1','s1|b':'s2','s2|a':'s1','s2|b':'s0'}
+      });
+    }
+
+    /* Conexión de botones con las funciones del equipo */
+    function accionGenerarDelta(){
+      $('error1').textContent = '';
+      try { generarCamposDelta(); } catch (e) { mostrarFallo($('error1'), e); }
+    }
+    function accionConstruir(){
+      $('error1').textContent = '';
+      try { usarAutomata(construirAutomata()); } catch (e) { mostrarFallo($('error1'), e); }
+    }
+    function accionModulo2(){
+      try { $('salida2').innerHTML = modulo2(automata); } catch (e) { mostrarFallo($('salida2'), e); }
+    }
+    function accionModulo3(){
+      try { $('salida3').innerHTML = modulo3(automata, $('palabra').value); } catch (e) { mostrarFallo($('salida3'), e); }
+    }
+
+
+
+    function listaDe(id){
+      return $(id).value.split(',').map(x => x.trim()).filter(x => x.length > 0);
+    }
+
+
+    function validarQySigma(Q, S){
+      if (Q.length === 0) throw new Error('Debe escribir al menos un estado en Q.');
+      if (new Set(Q).size !== Q.length) throw new Error('Hay estados repetidos en Q.');
+      if (Q.some(e => e.includes('|'))) throw new Error('Los nombres de estado no pueden contener «|».');
+      if (S.length === 0) throw new Error('Debe escribir al menos un símbolo en Σ.');
+      if (S.some(s => Array.from(s).length !== 1))
+        throw new Error('Cada símbolo del alfabeto debe ser de un solo carácter.');
+      if (new Set(S).size !== S.length) throw new Error('Hay símbolos repetidos en Σ.');
+      if (S.includes('|')) throw new Error('El carácter «|» no puede usarse como símbolo.');
+    }
+
+    function leerQySigma(){
+      const Q = listaDe('estados'), S = listaDe('alfabeto');
+      validarQySigma(Q, S);
+      return { Q, S };
+    }
+
+    function comparadorPalabras(a){
+      return (x, y) => {
+        for (let i = 0; i < Math.min(x.length, y.length); i++){
+          const ix = a.alfabeto.indexOf(x[i]), iy = a.alfabeto.indexOf(y[i]);
+          if (ix !== iy) return ix - iy;
+        }
+        return x.length - y.length;
+      };
+    }
+
+    /* Arma la cadena "s0 —a→ s1 —b→ s2" a partir de un recorrido. */
+    function recorridoHTML(a, palabra, r){
+      const partes = [esc(r.estados[0])];
+      for (let i = 0; i < r.estados.length - 1; i++)
+        partes.push(`—${esc(palabra[i])}→ ${esc(r.estados[i + 1])}`);
+      return partes.join(' ');
+    }
+
+    function generarCamposDelta(){
+      const { Q, S } = leerQySigma();
+      const cont = $('delta-container');
+
+      let h = '<table><tr><th>δ</th>' + S.map(s => `<th>${esc(s)}</th>`).join('') + '</tr>';
+      Q.forEach((e, i) => {
+        h += `<tr><th>${esc(e)}</th>`;
+        S.forEach((s, j) => {
+          h += `<td><select id="delta-${i}-${j}" aria-label="δ(${esc(e)}, ${esc(s)})">` +
+              '<option value="">—</option>' +
+              Q.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('') +
+              '</select></td>';
+        });
+        h += '</tr>';
+      });
+      cont.innerHTML = h + '</table>';
+
+      // Guardamos Q y Σ usados para poder avisar si el usuario los cambia después.
+      cont.dataset.q = JSON.stringify(Q);
+      cont.dataset.sigma = JSON.stringify(S);
+    }
+
+    function construirAutomata(){
+      const { Q, S } = leerQySigma();
+      const cont = $('delta-container');
+      if (!cont.dataset.q || !cont.dataset.sigma)
+        throw new Error('Primero pulse «Generar transiciones» para definir δ.');
+
+      const genQ = JSON.parse(cont.dataset.q), genS = JSON.parse(cont.dataset.sigma);
+      if (JSON.stringify(genQ) !== JSON.stringify(Q) || JSON.stringify(genS) !== JSON.stringify(S))
+        throw new Error('Q o Σ cambiaron después de generar δ. Vuelva a pulsar «Generar transiciones».');
+
+      const delta = {}, faltan = [];
+      Q.forEach((e, i) => S.forEach((s, j) => {
+        const sel = $(`delta-${i}-${j}`);
+        const destino = sel ? sel.value : '';
+        if (!destino){
+          faltan.push(`δ(${e}, ${s})`);
+        } else if (!Q.includes(destino)){
+          throw new Error(`El destino «${destino}» de δ(${e}, ${s}) no está en Q.`);
+        } else {
+          delta[e + '|' + s] = destino;
+        }
+      }));
+      if (faltan.length) throw new Error('Faltan transiciones: ' + faltan.join(', ') + '.');
+
+      const inicial = $('inicial').value.trim();
+      if (!inicial) throw new Error('Debe indicar el estado inicial q0.');
+      if (!Q.includes(inicial)) throw new Error(`El estado inicial «${inicial}» debe pertenecer a Q.`);
+
+      const finales = new Set(listaDe('finales'));
+      for (const f of finales)
+        if (!Q.includes(f)) throw new Error(`El estado final «${f}» debe pertenecer a Q.`);
+
+      const a = { estados: Q, alfabeto: S, delta, inicial, finales };
+      if (finales.size === 0)
+        a.advertencia = 'F está vacío: este autómata no reconoce ninguna palabra (ni siquiera ε).';
+      return a;
+    }
+
+    function recorrerPalabra(a, palabra){
+      const recorrido = { estados: [a.inicial], simboloInvalido: null, posicion: -1 };
+      let estado = a.inicial;
+      for (let i = 0; i < palabra.length; i++){
+        const simbolo = palabra[i];
+        if (!a.alfabeto.includes(simbolo)){
+          recorrido.simboloInvalido = simbolo;
+          recorrido.posicion = i + 1;
+          return recorrido;
+        }
+        estado = a.delta[estado + '|' + simbolo];
+        recorrido.estados.push(estado);
+      }
+      return recorrido;
+    }
+
+    function buscarPalabrasReconocidas(a, cantidad = 5, longitudMax = 10){
+      if (cantidad <= 0 || longitudMax < 0) return [];
+      const comparar = comparadorPalabras(a);
+      const reconocidas = [];
+      let porEstado = new Map([[a.inicial, ['']]]);   // longitud 0
+
+      for (let longitud = 0; longitud <= longitudMax; longitud++){
+        const aceptadas = [];
+        for (const [estado, palabras] of porEstado)
+          if (a.finales.has(estado)) aceptadas.push(...palabras);
+        aceptadas.sort(comparar);
+        for (const p of aceptadas){
+          reconocidas.push(p);
+          if (reconocidas.length >= cantidad) return reconocidas;
+        }
+        if (longitud === longitudMax) break;
+
+        const siguiente = new Map();
+        for (const [estado, palabras] of porEstado){
+          for (const s of a.alfabeto){
+            const destino = a.delta[estado + '|' + s];
+            if (!siguiente.has(destino)) siguiente.set(destino, []);
+            for (const p of palabras) siguiente.get(destino).push(p + s);
+          }
+        }
+        porEstado = new Map();
+        for (const [estado, palabras] of siguiente){
+          palabras.sort(comparar);
+          porEstado.set(estado, palabras.slice(0, cantidad));
+        }
+      }
+      return reconocidas;
+    }
+
+    function modulo2(a){
+      if (!a) return '<p class="no">Primero construya un autómata en el Módulo 1.</p>';
+      const palabras = buscarPalabrasReconocidas(a, 5, 10);
+      let h = '<h3>Palabras reconocidas (longitud ≤ 10)</h3>';
+
+      if (palabras.length === 0)
+        return h + '<p class="no">El autómata no reconoce ninguna palabra; compruebe F.</p>';
+
+      h += '<ol>';
+      for (const p of palabras){
+        const r = recorrerPalabra(a, p);
+        h += `<li><strong>${p === '' ? 'ε' : esc(p)}</strong> — ` +
+            `<span class="recorrido">${recorridoHTML(a, p, r)}</span></li>`;
+      }
+      h += '</ol>';
+      if (palabras.length < 5)
+        h += `<p class="aviso" style="display:block">Solo se encontraron ${palabras.length} ` +
+            `palabras reconocidas de longitud ≤ 10 (menos de cinco).</p>`;
+      return h;
+    }
+
+    /* Devuelve el texto/HTML del Módulo 3 para una palabra ('' = ε): recorrido,
+      estado final y resultado. Caso especial: símbolo fuera de Σ (indicar cuál
+      y en qué posición). */
+    function modulo3(a, palabra){
+      if (!a) return '<p class="no">Primero construya un autómata en el Módulo 1.</p>';
+      const r = recorrerPalabra(a, palabra);
+      const mostrada = palabra === '' ? 'ε' : esc(palabra);
+      let rec = recorridoHTML(a, palabra, r);
+      if (r.simboloInvalido !== null)
+        rec += ` <span class="no">—${esc(r.simboloInvalido)}→ ?</span>`;
+
+      let h = `<h3>Resultado para «${mostrada}»</h3>` +
+              `<p><strong>Recorrido:</strong> <span class="recorrido">${rec}</span></p>`;
+
+      if (r.simboloInvalido !== null)
+        return h + `<p class="no">El símbolo «${esc(r.simboloInvalido)}» no pertenece a Σ ` +
+                  `(posición ${r.posicion}); la palabra no es reconocida.</p>`;
+
+      const ultimo = r.estados[r.estados.length - 1];
+      h += `<p><strong>Estado final:</strong> ${esc(ultimo)}</p>`;
+      return h + (a.finales.has(ultimo)
+        ? `<p class="si">✓ «${mostrada}» SÍ es reconocida por el autómata.</p>`
+        : `<p class="no">✗ «${mostrada}» NO es reconocida por el autómata.</p>`);
+    }
+
+    mostrarSeccion(1);
+    </script>
+  </body>
+</html>
